@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 // SPDX-License-Identifier: GPL-2.0
 
 //! I2C Driver subsystem
@@ -33,8 +35,8 @@ use core::{
 
 use kernel::types::ARef;
 
-mod adapter;
-mod algo;
+pub mod adapter;
+pub mod algo;
 
 /// An I2C device id table.
 #[repr(transparent)]

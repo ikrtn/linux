@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+#![allow(unreachable_pub)]
+#![allow(unused_variables)]
+
 use crate::{
     bindings,
     device,
@@ -12,7 +16,7 @@ use core::{
     marker::PhantomData, //
 };
 
-struct I2cAdapterOptions{
+pub struct I2cAdapterOptions{
     /// The name of the miscdevice.
     pub name: &'static CStr,
 }
@@ -20,7 +24,13 @@ struct I2cAdapterOptions{
 impl I2cAdapterOptions {
     pub const fn from_raw<T: I2cAlgorithm>(self) -> bindings::i2c_adapter {
         let mut adapter: bindings::i2c_adapter = pin_init::zeroed();
-        adapter.name = crate::str::as_char_ptr_in_const_context(self.name);
+        // TODO: make it some other way... this looks like shit
+        let src = self.name.as_bytes_with_nul();
+        let mut i: usize = 0;
+        while i < src.len() {
+            adapter.name[i] = src[i];
+            i += 1;
+        }
         adapter.algo = I2cAlgorithmVTable::<T>::build();
         
         adapter
@@ -28,10 +38,10 @@ impl I2cAdapterOptions {
 }
 
 #[repr(transparent)]
-#[pin_data(PinnedDrop)]
+#[pin_data]
 pub struct Registration<T> {
     #[pin]
-    inner: bindings::i2c_adapter,
+    inner: Opaque<bindings::i2c_adapter>,
     t_: PhantomData<T>
 }
 
@@ -53,14 +63,6 @@ impl<T: I2cAlgorithm> Registration<T> {
             t_: PhantomData,
             }
         }
-    }
-}
-
-impl<T> Drop for Registration<T> {
-    fn drop(&mut self) {
-        // SAFETY: `Drop` is only called for a valid `Registration`, which by invariant
-        // always contains a non-null pointer to an `i2c_client`.
-        unsafe { bindings::i2c_unregister_device(self.0.as_ptr()) }
     }
 }
 

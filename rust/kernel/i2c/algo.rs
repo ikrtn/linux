@@ -1,4 +1,6 @@
 #![allow(unused_variables)]
+#![allow(dead_code)]
+#![allow(unreachable_pub)]
 use crate::{
     bindings::{
         i2c_adapter, 

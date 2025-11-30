@@ -1,9 +1,17 @@
+#![allow(dead_code)]
+#![allow(missing_docs)]
+#![allow(non_snake_case)]
+
 use kernel::{ 
     bindings, 
     c_str, 
     device::Core, 
     devres::Devres, 
-    i2c::I2cAdapterRegistration, 
+    i2c::adapter::{
+        Registration,
+        I2cAdapterOptions,
+    },
+    i2c::algo::I2cAlgorithm,
     pci, 
     prelude::*, 
     sync::aref::ARef //
@@ -34,16 +42,17 @@ type Bar0 = pci::Bar<{ Sis96xRegs::END }>;
 
 #[pin_data(PinnedDrop)]
 struct Sis96xDriver {
-    pdev: ARef<pci::Device>,
+    parent_dev: ARef<pci::Device>,
     #[pin]
-    i2cAdap: I2cAdapterRegistration,
-    i2cAlgo: bindings::i2c_algorithm,
+    i2cAdap: Devres<Registration<Sis96xDevice>>,
     #[pin]
     bar: Devres<Bar0>,
 }
 
-pub extern "C" fn functionality(_adap: *mut bindings::i2c_adapter) -> u32 {
-    0
+struct Sis96xDevice {}
+
+impl I2cAlgorithm for Sis96xDevice {
+
 }
 
 kernel::pci_device_table!(
@@ -59,38 +68,26 @@ impl pci::Driver for Sis96xDriver {
     const ID_TABLE: pci::IdTable<Self::IdInfo> = &SIS96X_PCI_TABLE;
 
     fn probe(pdev: &pci::Device<Core>, _id_info: &Self::IdInfo) -> impl PinInit<Self, Error> {
-        pdev.enable_device_mem()?;
-        pdev.set_master();
+        pin_init::pin_init_scope(move || {
+            pdev.enable_device_mem()?;
+            pdev.set_master();
 
-        let drvdata: Pin<Box<_, kernel::alloc::allocator::Kmalloc>> = KBox::pin_init(
-            try_pin_init!(Self {
+            Ok(try_pin_init!(Self {
                 bar <- pdev.iomap_region_sized::<{ Sis96xRegs::END }>(0, c_str!("rust_driver_pci")),
-                pdev: pdev.into(),
-                i2cAlgo <- {
-                    let algo: bindings::i2c_algorithm;
-                    algo.functionality = Some(functionality);
-
-                    algo
-                },
+                parent_dev: pdev.into(),
                 i2cAdap <- {
-                    let adap: I2cAdapterRegistration;
-                    adap.0.class = bindings::I2C_CLASS_HWMON;
-                    adap.0.algo = i2cAlgo;
-
-                    adap
+                    let name = I2cAdapterOptions{ name: c_str!("i2c_sis96x_rust")};
+                    Registration::register(pdev.as_ref(), name)
                 },
-            }),
-            GFP_KERNEL,
-        )?;
-    
-        Ok(drvdata)
+            }))
+        })
     }
 }
 
 #[pinned_drop]
 impl PinnedDrop for Sis96xDriver {
     fn drop(self: Pin<&mut Self>) {
-        dev_dbg!(self.pdev.as_ref(), "Remove Rust PCI driver sample.\n");
+        dev_dbg!(self.parent_dev.as_ref(), "Remove Rust PCI driver sample.\n");
     }
 }
 
