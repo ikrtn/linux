@@ -33,6 +33,9 @@ use core::{
 
 use kernel::types::ARef;
 
+mod adapter;
+mod algo;
+
 /// An I2C device id table.
 #[repr(transparent)]
 #[derive(Clone, Copy)]
