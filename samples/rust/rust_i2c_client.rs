@@ -72,7 +72,11 @@ use kernel::{
     c_str,
     device,
     devres::Devres,
-    i2c,
+    i2c::{
+        adapter::I2cAdapter,
+        client::I2cBoardInfo,
+        client::Registration, //
+    }, //
     of,
     platform,
     prelude::*,
@@ -83,7 +87,7 @@ use kernel::{
 struct SampleDriver {
     parent_dev: ARef<platform::Device>,
     #[pin]
-    _reg: Devres<i2c::Registration>,
+    _reg: Devres<Registration>,
 }
 
 kernel::of_device_table!(
@@ -102,8 +106,8 @@ kernel::acpi_device_table!(
 
 const SAMPLE_I2C_CLIENT_ADDR: u16 = 0x30;
 const SAMPLE_I2C_ADAPTER_INDEX: i32 = 0;
-const BOARD_INFO: i2c::I2cBoardInfo =
-    i2c::I2cBoardInfo::new(c_str!("rust_driver_i2c"), SAMPLE_I2C_CLIENT_ADDR);
+const BOARD_INFO: I2cBoardInfo =
+    I2cBoardInfo::new(c_str!("rust_driver_i2c"), SAMPLE_I2C_CLIENT_ADDR);
 
 impl platform::Driver for SampleDriver {
     type IdInfo = ();
@@ -123,9 +127,9 @@ impl platform::Driver for SampleDriver {
             parent_dev: pdev.into(),
 
             _reg <- {
-                let adapter = i2c::I2cAdapter::get(SAMPLE_I2C_ADAPTER_INDEX)?;
+                let adapter = I2cAdapter::get(SAMPLE_I2C_ADAPTER_INDEX)?;
 
-                i2c::Registration::new(&adapter, &BOARD_INFO, pdev.as_ref())
+                Registration::new(&adapter, &BOARD_INFO, pdev.as_ref())
             }
         })
     }

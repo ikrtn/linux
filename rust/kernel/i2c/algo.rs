@@ -11,7 +11,7 @@ use crate::{
         u8_, //
     }, 
     error::VTABLE_DEFAULT_ERROR, //
-    i2c::I2cAdapter,
+    i2c::adapter::I2cAdapter,
     prelude::*,
 };
 
@@ -21,6 +21,18 @@ use core::{
 
 pub trait I2cAlgorithm {
     fn xfer(adap: &I2cAdapter) {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
+    fn xfer_atomic(adap: &I2cAdapter) {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
+    fn smbus_xfer(adap: &I2cAdapter) {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
+    fn smbus_xfer_atomic(adap: &I2cAdapter) {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
+    fn functionality(adap: &I2cAdapter) {
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 }
