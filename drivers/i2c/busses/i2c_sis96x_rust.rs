@@ -44,7 +44,7 @@ type Bar0 = pci::Bar<{ Sis96xRegs::END }>;
 struct Sis96xDriver {
     parent_dev: ARef<pci::Device>,
     #[pin]
-    i2cAdap: Devres<Registration<Sis96xDevice>>,
+    i2c_adap: Devres<Registration<Sis96xDevice>>,
     #[pin]
     bar: Devres<Bar0>,
 }
@@ -75,7 +75,7 @@ impl pci::Driver for Sis96xDriver {
             Ok(try_pin_init!(Self {
                 bar <- pdev.iomap_region_sized::<{ Sis96xRegs::END }>(0, c_str!("rust_driver_pci")),
                 parent_dev: pdev.into(),
-                i2cAdap <- {
+                i2c_adap <- {
                     let name = I2cAdapterOptions{ name: c_str!("i2c_sis96x_rust")};
                     Registration::register(pdev.as_ref(), name)
                 },
