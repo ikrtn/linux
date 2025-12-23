@@ -2,19 +2,16 @@
 #![allow(missing_docs)]
 #![allow(non_snake_case)]
 
-use kernel::{ 
-    bindings, 
-    c_str, 
-    device::Core, 
-    devres::Devres, 
-    i2c::adapter::{
-        Registration,
-        I2cAdapterOptions,
-    },
+use kernel::{
+    bindings,
+    c_str,
+    device::Core,
+    devres::Devres,
+    i2c::adapter::{I2cAdapterOptions, Registration},
     i2c::algo::I2cAlgorithm,
-    pci, 
-    prelude::*, 
-    sync::aref::ARef //
+    pci,
+    prelude::*,
+    sync::aref::ARef, //
 };
 
 struct Sis96xRegs;
@@ -51,15 +48,16 @@ struct Sis96xDriver {
 
 struct Sis96xDevice {}
 
-impl I2cAlgorithm for Sis96xDevice {
-
-}
+impl I2cAlgorithm for Sis96xDevice {}
 
 kernel::pci_device_table!(
     SIS96X_PCI_TABLE,
     MODULE_SIS96X_PCI_TABLE,
     <Sis96xDriver as pci::Driver>::IdInfo,
-    [(pci::DeviceId::from_id(pci::Vendor::SI, bindings::PCI_DEVICE_ID_SI_SMBUS),())]
+    [(
+        pci::DeviceId::from_id(pci::Vendor::SI, bindings::PCI_DEVICE_ID_SI_SMBUS),
+        ()
+    )]
 );
 
 impl pci::Driver for Sis96xDriver {

@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-
 // SPDX-License-Identifier: GPL-2.0
 
 //! I2C Driver subsystem
@@ -17,7 +16,7 @@ use crate::{
     i2c::client::I2cClient,
     of,
     prelude::*,
-    types:: Opaque, //
+    types::Opaque, //
 };
 
 pub mod adapter;
@@ -348,4 +347,3 @@ pub trait Driver: Send {
         let _ = (dev, this);
     }
 }
-

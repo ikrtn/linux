@@ -1,7 +1,3 @@
-#![allow(dead_code)]
-#![allow(unreachable_pub)]
-#![allow(unused_variables)]
-
 use crate::{
     bindings,
     device,
@@ -9,7 +5,7 @@ use crate::{
     error::*,
     i2c::algo::*,
     prelude::*,
-    types::Opaque,
+    types::Opaque, //
 };
 
 use core::{
@@ -38,6 +34,18 @@ pub struct I2cAdapter<Ctx: device::DeviceContext = device::Normal>(
 impl<Ctx: device::DeviceContext> I2cAdapter<Ctx> {
     pub(super) fn as_raw(&self) -> *mut bindings::i2c_adapter {
         self.0.get()
+    }
+
+    /// Convert a raw C `struct i2c_adapter` pointer to a `&'a I2cAdapter`.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that `ptr` is valid, non-null, and has a non-zero reference count,
+    /// i.e. it must be ensured that the reference count of the C `struct i2c_adapter` `ptr` points to
+    /// can't drop to zero, for the duration of this function call and the entire duration when the
+    /// returned reference exists.
+    pub(super) fn from_raw<'a>(ptr: *mut bindings::i2c_adapter) -> &'a Self {
+        unsafe { &*ptr.cast() }
     }
 }
 
@@ -80,13 +88,13 @@ unsafe impl crate::types::AlwaysRefCounted for I2cAdapter {
     }
 }
 
-pub struct I2cAdapterOptions{
+pub struct I2cAdapterOptions {
     /// The name of the miscdevice.
     pub name: &'static CStr,
 }
 
 impl I2cAdapterOptions {
-    pub const fn from_raw<T: I2cAlgorithm>(self) -> bindings::i2c_adapter {
+    pub const fn as_raw<T: I2cAlgorithm>(self) -> bindings::i2c_adapter {
         let mut adapter: bindings::i2c_adapter = pin_init::zeroed();
         // TODO: make it some other way... this looks like shit
         let src = self.name.as_bytes_with_nul();
@@ -96,7 +104,7 @@ impl I2cAdapterOptions {
             i += 1;
         }
         adapter.algo = I2cAlgorithmVTable::<T>::build();
-        
+
         adapter
     }
 }
@@ -106,21 +114,24 @@ impl I2cAdapterOptions {
 pub struct Registration<T> {
     #[pin]
     inner: Opaque<bindings::i2c_adapter>,
-    t_: PhantomData<T>
+    t_: PhantomData<T>,
 }
 
 impl<T: I2cAlgorithm> Registration<T> {
     pub fn register<'a>(
         parent_dev: &'a device::Device<device::Bound>,
-        opts: I2cAdapterOptions
-    ) -> impl PinInit<Devres<Self>, Error> + 'a where T: 'a{
+        opts: I2cAdapterOptions,
+    ) -> impl PinInit<Devres<Self>, Error> + 'a
+    where
+        T: 'a,
+    {
         Devres::new(parent_dev, Self::new(opts))
     }
 
     fn new(opts: I2cAdapterOptions) -> impl PinInit<Self, Error> {
         try_pin_init! { Self {
             inner <- Opaque::try_ffi_init(move |slot: *mut bindings::i2c_adapter| {
-                    unsafe {slot.write(opts.from_raw::<T>()) };
+                    unsafe {slot.write(opts.as_raw::<T>()) };
 
                     to_result(unsafe {bindings::i2c_add_adapter(slot)})
                 }),
