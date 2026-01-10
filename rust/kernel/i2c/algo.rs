@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
+
+//! I2C subsystem
+
+// I2C Algorithm abstractions.
 use crate::{
     bindings::{
         i2c_adapter,
@@ -16,41 +21,70 @@ use crate::{
 
 use core::{
     marker::PhantomData,
-    mem::MaybeUninit,
 };
 
+/// The i2c msg representation.
+///
+/// This structure represents the Rust abstraction for a C `struct i2c_msg`. The
+/// implementation abstracts the usage of an existing C `struct i2c_msg` that
+/// gets passed from/to the C side
+///
+/// # Invariants
+///
+/// A [`I2cMsg`] instance represents a valid `struct i2c_msg` created by the C portion of
+/// the kernel.
 #[repr(transparent)]
 pub struct I2cMsg(Opaque<bindings::i2c_msg>);
 
 impl I2cMsg {
+    /// Convert a raw C `struct i2c_msg` pointers to `&'a mut [I2cMsg]`.
     pub fn from_raw_parts_mut<'a>(msgs: *mut bindings::i2c_msg, len: usize) -> &'a mut [Self] {
-        unsafe { core::slice::from_raw_parts_mut(msgs as *mut Self, len) }
+        // SAFETY: Callers must ensure that `msgs` is valid, non-null, for the duration of this 
+        // function call and the entire duration when the returned slice exists.
+        unsafe { core::slice::from_raw_parts_mut(msgs.cast::<Self>(), len) }
     }
 }
 
+/// The i2c smbus data representation.
+///
+/// This structure represents the Rust abstraction for a C `struct i2c_smbus_data`. The
+/// implementation abstracts the usage of an existing C `struct i2c_smbus_data` that
+/// gets passed from/to the C side
+///
+/// # Invariants
+///
+/// A [`I2cSmbusData`] instance represents a valid `struct i2c_msg` created by the C portion of
+/// the kernel.
 #[repr(transparent)]
 pub struct I2cSmbusData(Opaque<bindings::i2c_smbus_data>);
 
 impl I2cSmbusData {
-    unsafe fn from_raw<'a>(ptr: *const bindings::i2c_smbus_data) -> &'a Self {
+    /// Convert a raw C `struct i2c_smbus_data` pointer to `&'a I2cSmbusData`.
+    fn from_raw<'a>(ptr: *const bindings::i2c_smbus_data) -> &'a Self {
+        // SAFETY: Callers must ensure that `ptr` is valid, non-null, for the duration of this 
+        // function call and the entire duration when the returned reference exists.
         unsafe { &*ptr.cast() }
     }
 }
 
+/// Trait implemented by the private data of an i2c adapter.
+#[vtable]
 pub trait I2cAlgorithm {
-    const HAS_FUNCTIONALITY: bool = false;
-    const HAS_SMBUS_XFER: bool = false;
-    const HAS_SMBUS_XFER_ATOMIC: bool = false;
-    const HAS_XFER: bool = false;
-    const HAS_XFER_ATOMIC: bool = false;
+    /// Handler for transfer a given number of messages defined by the msgs array 
+    /// via the specified adapter.
     fn xfer(_adap: &I2cAdapter<Bound>, _msgs: &mut [I2cMsg]) -> Result {
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 
+    /// Same as @xfer. Yet, only using atomic context so e.g. PMICs
+    /// can be accessed very late before shutdown. Optional.
     fn xfer_atomic(_adap: &I2cAdapter<Bound>, _msgs: &mut [I2cMsg]) -> Result {
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 
+    /// Issue SMBus transactions to the given I2C adapter. If this
+    /// is not present, then the bus layer will try and convert the SMBus calls
+    /// into I2C transfers instead.
     fn smbus_xfer(
         _adap: &I2cAdapter<Bound>,
         _addr: u16,
@@ -63,6 +97,8 @@ pub trait I2cAlgorithm {
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 
+    /// Same as @smbus_xfer. Yet, only using atomic context
+    /// so e.g. PMICs can be accessed very late before shutdown. Optional.
     fn smbus_xfer_atomic(
         _adap: &I2cAdapter<Bound>,
         _addr: u16,
@@ -75,15 +111,22 @@ pub trait I2cAlgorithm {
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 
+    /// Return the flags that this algorithm/adapter pair supports
+    /// from the ``I2C_FUNC_*`` flags.
     fn functionality(_adap: &I2cAdapter<Bound>) -> u32 {
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 }
 
-/// A vtable for the file operations of a Rust miscdevice.
+/// A vtable for the I2C xfer operations of a Rust i2c adapter.
 pub struct I2cAlgorithmVTable<T: I2cAlgorithm>(PhantomData<T>);
 
 impl<T: I2cAlgorithm> I2cAlgorithmVTable<T> {
+    /// # Safety
+    ///
+    /// `adap` must be a valid pointer to `struct i2c_adapter` that is associated with a
+    /// `I2cAdapterRegistration<T>`. 
+    /// `msgs` must be a valid pointer to `struct i2c_msg` for reading/writing.
     unsafe extern "C" fn xfer(
         adap: *mut i2c_adapter,
         msgs: *mut i2c_msg,
@@ -102,6 +145,11 @@ impl<T: I2cAlgorithm> I2cAlgorithmVTable<T> {
         }
     }
 
+    /// # Safety
+    ///
+    /// `adap` must be a valid pointer to `struct i2c_adapter` that is associated with a
+    /// `I2cAdapterRegistration<T>`. 
+    /// `msgs` must be a valid pointer to `struct i2c_msg` for reading/writing.
     unsafe extern "C" fn xfer_atomic(
         adap: *mut i2c_adapter,
         msgs: *mut i2c_msg,
@@ -120,6 +168,11 @@ impl<T: I2cAlgorithm> I2cAlgorithmVTable<T> {
         }
     }
 
+    /// # Safety
+    ///
+    /// `adap` must be a valid pointer to `struct i2c_adapter` that is associated with a
+    /// `I2cAdapterRegistration<T>`. 
+    /// `data` must be a valid pointer to `struct i2c_smbus_data` for reading/writing.
     unsafe extern "C" fn smbus_xfer(
         adap: *mut i2c_adapter,
         addr: u16_,
@@ -134,7 +187,7 @@ impl<T: I2cAlgorithm> I2cAlgorithmVTable<T> {
             Err(_err) => return EINVAL.to_errno(),
         };
 
-        let data = unsafe { I2cSmbusData::from_raw(data) };
+        let data = I2cSmbusData::from_raw(data);
 
         match T::smbus_xfer(
             I2cAdapter::from_raw(adap),
@@ -150,6 +203,11 @@ impl<T: I2cAlgorithm> I2cAlgorithmVTable<T> {
         }
     }
 
+    /// # Safety
+    ///
+    /// `adap` must be a valid pointer to `struct i2c_adapter` that is associated with a
+    /// `I2cAdapterRegistration<T>`. 
+    /// `data` must be a valid pointer to `struct i2c_smbus_data` for reading/writing.
     unsafe extern "C" fn smbus_xfer_atomic(
         adap: *mut i2c_adapter,
         addr: u16_,
@@ -164,7 +222,7 @@ impl<T: I2cAlgorithm> I2cAlgorithmVTable<T> {
             Err(_err) => return EINVAL.to_errno(),
         };
 
-        let data = unsafe { I2cSmbusData::from_raw(data) };
+        let data = I2cSmbusData::from_raw(data);
 
         match T::smbus_xfer_atomic(
             I2cAdapter::from_raw(adap),
@@ -180,8 +238,10 @@ impl<T: I2cAlgorithm> I2cAlgorithmVTable<T> {
         }
     }
 
-    // SAFETY: The caller provides a valid `struct i2c_adapter` associated with a
-    // `I2cAdapterRegistration<T>` file.
+    /// # Safety
+    ///
+    /// `adap` must be a valid pointer to `struct i2c_adapter` that is associated with a
+    /// `I2cAdapterRegistration<T>`. 
     unsafe extern "C" fn functionality(adap: *mut i2c_adapter) -> u32_ {
         T::functionality(I2cAdapter::from_raw(adap))
     }
@@ -212,11 +272,9 @@ impl<T: I2cAlgorithm> I2cAlgorithmVTable<T> {
         } else {
             None
         },
-        // SAFETY: All zeros is a valid value for `bindings::file_operations`.
-        ..unsafe { MaybeUninit::zeroed().assume_init() }
     };
 
-    pub const fn build() -> &'static bindings::i2c_algorithm {
+    pub(super) const fn build() -> &'static bindings::i2c_algorithm {
         &Self::VTABLE
     }
 }

@@ -70,10 +70,8 @@ struct I801Driver {
 
 struct I801Device {}
 
+#[vtable]
 impl I2cAlgorithm for I801Device {
-    const HAS_FUNCTIONALITY: bool = true;
-    const HAS_SMBUS_XFER: bool = true;
-
     fn smbus_xfer(
         adap: &I2cAdapter<Bound>,
         addr: u16,
@@ -110,11 +108,6 @@ impl pci::Driver for I801Driver {
         pin_init::pin_init_scope(move || {
             pdev.enable_device_mem()?;
             pdev.set_master();
-
-            bar0 = pdev.iomap_region_sized::<{ I801IoRegs::END }>(SMBBAR_MMIO, c_str!("i801_smbus/bar0"));
-            bar4 = pdev.iomap_region_sized::<{ I801Regs::END }>(SMBBAR, c_str!("i801_smbus/bar4"));
-
-            define_read!();
 
             Ok(try_pin_init!(Self {
                 bar0 <- pdev.iomap_region_sized::<{ I801IoRegs::END }>(SMBBAR_MMIO, c_str!("i801_smbus/bar0")),

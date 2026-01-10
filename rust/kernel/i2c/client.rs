@@ -1,4 +1,8 @@
-// I2C Driver abstractions.
+// SPDX-License-Identifier: GPL-2.0
+
+//! I2C subsystem
+
+// I2C Client abstractions.
 use crate::{
     container_of,
     device,
@@ -33,11 +37,8 @@ impl I2cBoardInfo {
     /// Create a new [`I2cBoardInfo`] for a kernel driver.
     #[inline(always)]
     pub const fn new(type_: &'static CStr, addr: u16) -> Self {
-        build_assert!(
-            type_.len_with_nul() <= Self::I2C_TYPE_SIZE,
-            "Type exceeds 20 bytes"
-        );
-        let src = type_.as_bytes_with_nul();
+        let src = type_.to_bytes_with_nul();
+        build_assert!(src.len() <= Self::I2C_TYPE_SIZE, "Type exceeds 20 bytes");
         let mut i2c_board_info: bindings::i2c_board_info = pin_init::zeroed();
         let mut i: usize = 0;
         while i < src.len() {
@@ -138,6 +139,80 @@ unsafe impl Send for I2cClient {}
 // SAFETY: `I2cClient` can be shared among threads because all methods of `I2cClient`
 // (i.e. `I2cClient<Normal>) are thread safe.
 unsafe impl Sync for I2cClient {}
+
+impl I2cClient<device::Normal> {
+    /// The C `i2c_smbus_read_byte` function wrapper for SMbus "read byte" protocol
+    pub fn i2c_smbus_read_byte(&self) -> Result<u8> {
+        // SAFETY: self is a valid reference to a I2cClient<Normal>
+        let result = unsafe { bindings::i2c_smbus_read_byte(self.as_raw()) };
+        to_result(result)?;
+        Ok(result as u8)
+    }
+
+    /// The C `i2c_smbus_write_byte` function wrapper for SMbus "write byte" protocol
+    pub fn i2c_smbus_write_byte(&self, value: u8) -> Result {
+        // SAFETY: self is a valid reference to a I2cClient<Normal>
+        to_result( unsafe { bindings::i2c_smbus_write_byte(self.as_raw(), value) })   
+    }
+
+    /// The C `i2c_smbus_read_byte_data` function wrapper for SMbus "read byte" protocol
+    pub fn i2c_smbus_read_byte_data(&self, command: u8) -> Result<u8> {
+        // SAFETY: self is a valid reference to a I2cClient<Normal>
+        let result = unsafe { bindings::i2c_smbus_read_byte_data(self.as_raw(), command) };
+        to_result(result)?;
+        Ok(result as u8)
+    }
+
+    /// The C `i2c_smbus_write_byte_data` function wrapper for SMbus "write byte" protocol
+    pub fn i2c_smbus_write_byte_data(&self, command: u8, value: u8) -> Result {
+        // SAFETY: self is a valid reference to a I2cClient<Normal>
+        to_result(unsafe { bindings::i2c_smbus_write_byte_data(self.as_raw(), command, value) } )
+    }
+
+    /// The C `i2c_smbus_read_word_data` function wrapper for SMbus "read word" protocol 
+    pub fn i2c_smbus_read_word_data(&self, command: u8) -> Result<u16> {
+        // SAFETY: self is a valid reference to a I2cClient<Normal>
+        let result = unsafe { bindings::i2c_smbus_read_word_data(self.as_raw(), command) };
+        to_result(result)?;
+        Ok(result as u16)
+    }
+
+    /// The C `i2c_smbus_write_word_data` function wrapper for SMbus "write word" protocol
+    pub fn i2c_smbus_write_word_data(&self, command: u8, value: u16) -> Result {
+        // SAFETY: self is a valid reference to a I2cClient<Normal>
+        to_result( unsafe { bindings::i2c_smbus_write_word_data(self.as_raw(), command, value) } )
+    }
+
+    /// The C `i2c_smbus_read_i2c_block_data` function wrapper for SMbus "block read" protocol
+    pub fn i2c_smbus_read_i2c_block_data(&self, command: u8, values: & mut [u8]) -> Result<usize> {
+        // SAFETY: self is a valid reference to a I2cClient<Normal>
+        let result = unsafe { bindings::i2c_smbus_read_i2c_block_data(self.as_raw(), command, values.len() as u8, values.as_mut_ptr()) };
+        to_result(result)?;
+        Ok(result as usize)
+    }
+
+    /// The C `i2c_smbus_write_i2c_block_data` function wrapper for SMbus "block write" protocol
+    pub fn i2c_smbus_write_i2c_block_data(&self, command: u8, values: &[u8]) -> Result {
+        // SAFETY: self is a valid reference to a I2cClient<Normal>
+        to_result(unsafe { bindings::i2c_smbus_write_i2c_block_data(self.as_raw(), command, values.len() as u8, values.as_ptr()) } )
+    }
+
+    /// The C `i2c_master_recv` function wrapper to issue a single I2C message in master receive mode
+    pub fn i2c_master_recv(&self, buf: & mut [u8]) -> Result<usize> {
+        // SAFETY: self is a valid reference to a I2cClient<Normal>
+        let result = unsafe { bindings::i2c_master_recv(self.as_raw(), buf.as_mut_ptr(), buf.len() as i32)};
+        to_result(result)?;
+        Ok(result as usize) 
+    }
+
+    /// The C `i2c_master_send` function wrapper to issue a single I2C message in master transmit mode
+    pub fn i2c_master_send(&self, buf: &[u8]) -> Result<usize> {
+        // SAFETY: self is a valid reference to a I2cClient<Normal>
+        let result = unsafe { bindings::i2c_master_send(self.as_raw(), buf.as_ptr(), buf.len() as i32)};
+        to_result(result)?;
+        Ok(result as usize)
+    }
+}
 
 /// The registration of an i2c client device.
 ///

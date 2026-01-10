@@ -1,7 +1,6 @@
-#![allow(missing_docs)]
 // SPDX-License-Identifier: GPL-2.0
 
-//! I2C Driver subsystem
+//! I2C subsystem
 
 // I2C Driver abstractions.
 use crate::{

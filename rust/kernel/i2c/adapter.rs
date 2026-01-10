@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
+
+//! I2C subsystem
+
+// I2C Adapter abstractions.
 use crate::{
     bindings,
     device,
@@ -37,14 +42,11 @@ impl<Ctx: device::DeviceContext> I2cAdapter<Ctx> {
     }
 
     /// Convert a raw C `struct i2c_adapter` pointer to a `&'a I2cAdapter`.
-    ///
-    /// # Safety
-    ///
-    /// Callers must ensure that `ptr` is valid, non-null, and has a non-zero reference count,
-    /// i.e. it must be ensured that the reference count of the C `struct i2c_adapter` `ptr` points to
-    /// can't drop to zero, for the duration of this function call and the entire duration when the
-    /// returned reference exists.
     pub(super) fn from_raw<'a>(ptr: *mut bindings::i2c_adapter) -> &'a Self {
+        // SAFETY: Callers must ensure that `ptr` is valid, non-null, and has a non-zero reference 
+        // count, i.e. it must be ensured that the reference count of the C `struct i2c_adapter` 
+        // `ptr` points to can't drop to zero, for the duration of this function call and the entire
+        // duration when the returned reference exists.
         unsafe { &*ptr.cast() }
     }
 }
@@ -88,16 +90,18 @@ unsafe impl crate::types::AlwaysRefCounted for I2cAdapter {
     }
 }
 
+/// Options for creating a misc device.
 pub struct I2cAdapterOptions {
     /// The name of the miscdevice.
     pub name: &'static CStr,
 }
 
 impl I2cAdapterOptions {
+    /// Create a raw `struct i2c_adapter` ready for registration.
     pub const fn as_raw<T: I2cAlgorithm>(self) -> bindings::i2c_adapter {
         let mut adapter: bindings::i2c_adapter = pin_init::zeroed();
         // TODO: make it some other way... this looks like shit
-        let src = self.name.as_bytes_with_nul();
+        let src = self.name.to_bytes_with_nul();
         let mut i: usize = 0;
         while i < src.len() {
             adapter.name[i] = src[i];
@@ -109,8 +113,19 @@ impl I2cAdapterOptions {
     }
 }
 
+/// A registration of a I2C Adapter.
+///
+/// # Invariants
+///
+/// - `inner` contains a `struct i2c_adapter` that is registered using
+///   `i2c_add_adapter()`.
+/// - This registration remains valid for the entire lifetime of the
+///   [`I2cAdapter::Registration`] instance.
+/// - Deregistration occurs exactly once in [`Drop`] via `i2c_del_adapter()`.
+/// - `inner` wraps a valid, pinned `i2c_adapter` created using
+///   [`I2cAdapterOptions::as_raw`].
 #[repr(transparent)]
-#[pin_data]
+#[pin_data(PinnedDrop)]
 pub struct Registration<T> {
     #[pin]
     inner: Opaque<bindings::i2c_adapter>,
@@ -118,6 +133,7 @@ pub struct Registration<T> {
 }
 
 impl<T: I2cAlgorithm> Registration<T> {
+    /// Register an I2C adapter.
     pub fn register<'a>(
         parent_dev: &'a device::Device<device::Bound>,
         opts: I2cAdapterOptions,
@@ -131,13 +147,27 @@ impl<T: I2cAlgorithm> Registration<T> {
     fn new(opts: I2cAdapterOptions) -> impl PinInit<Self, Error> {
         try_pin_init! { Self {
             inner <- Opaque::try_ffi_init(move |slot: *mut bindings::i2c_adapter| {
-                    unsafe {slot.write(opts.as_raw::<T>()) };
+                // SAFETY: The initializer can write to the provided `slot`.
+                unsafe {slot.write(opts.as_raw::<T>()) };
 
-                    to_result(unsafe {bindings::i2c_add_adapter(slot)})
-                }),
+                // SAFETY: the `struct i2c_adapter` was just created in slot. The adapter will
+                // get unregistered before `slot` is deallocated because the memory is pinned and
+                // the destructor of this type deallocates the memory.
+                // INVARIANT: If this returns `Ok(())`, then the `slot` will contain a registered
+                // i2c adapter.
+                to_result(unsafe {bindings::i2c_add_adapter(slot)})
+            }),
             t_: PhantomData,
             }
         }
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for Registration<T> {
+    fn drop(self: Pin<&mut Self>) {
+        // SAFETY: We know that the device is registered by the type invariants.
+        unsafe { bindings::i2c_del_adapter(self.inner.get()) };
     }
 }
 
