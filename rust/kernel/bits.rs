@@ -201,3 +201,60 @@ impl_genmask_fn!(
     /// assert_eq!(genmask_u8(0..=7), u8::MAX);
     /// ```
 );
+
+/// defines flags
+#[macro_export]
+macro_rules! define_flags {
+    (
+        $gen_name:ident($gen_type:ident),
+        $($variant:ident = $binding:expr,)+
+    ) => {
+        /// Flags that can be combined with the operators `|`, `&`, and `!`.
+        ///
+        /// Values can be used from the [`flags`] module.
+        #[derive(Clone, Copy, PartialEq)]
+        pub struct $gen_name($gen_type);
+
+        impl $gen_name {
+            /// Get the raw representation of this flag.
+            pub(crate) fn as_raw(self) -> $gen_type {
+                self.0
+            }
+
+            /// Check whether `flags` is contained in `self`.
+            pub fn contains(self, flags: $gen_name) -> bool {
+                (self & flags) == flags
+            }
+        }
+
+        impl core::ops::BitOr for $gen_name {
+            type Output = $gen_name;
+            fn bitor(self, rhs: Self) -> Self::Output {
+                Self(self.0 | rhs.0)
+            }
+        }
+
+        impl core::ops::BitAnd for $gen_name {
+            type Output = $gen_name;
+            fn bitand(self, rhs: Self) -> Self::Output {
+                Self(self.0 & rhs.0)
+            }
+        }
+
+        impl core::ops::Not for $gen_name {
+            type Output = $gen_name;
+            fn not(self) -> Self::Output {
+                Self(!self.0)
+            }
+        }
+
+        #[allow(missing_docs)]
+        pub mod flags {
+            use super::$gen_name;
+            $(
+                #[allow(missing_docs)]
+                pub const $variant: $gen_name = $gen_name($binding as $gen_type);
+            )+
+        }
+    }
+}
