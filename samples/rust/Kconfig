@@ -107,6 +107,18 @@ config SAMPLE_RUST_I2C_CLIENT
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_I2C_ADAPTER
+	tristate "I2C Adapter Registration"
+	depends on I2C=y
+	help
+	  This option builds the Rust I2C adapter manual creation
+	  sample.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_i2c_adapter.
+
+	  If unsure, say N.
+
 config SAMPLE_RUST_DRIVER_PCI
 	tristate "PCI Driver"
 	depends on PCI
