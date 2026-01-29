@@ -28,6 +28,7 @@ use core::{
 };
 
 pub mod adapter;
+pub mod algo;
 pub mod client;
 
 /// An I2C device id table.
