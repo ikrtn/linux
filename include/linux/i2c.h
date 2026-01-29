@@ -548,18 +548,24 @@ struct i2c_algorithm {
 	 * smbus_xfer. If set to NULL, the SMBus protocol is simulated
 	 * using common I2C messages.
 	 */
+#ifndef __BINDGEN__
 	union {
+#endif
 		int (*xfer)(struct i2c_adapter *adap, struct i2c_msg *msgs,
 			    int num);
+#ifndef __BINDGEN__
 		int (*master_xfer)(struct i2c_adapter *adap, struct i2c_msg *msgs,
 				   int num);
 	};
 	union {
+#endif
 		int (*xfer_atomic)(struct i2c_adapter *adap,
 				   struct i2c_msg *msgs, int num);
+#ifndef __BINDGEN__
 		int (*master_xfer_atomic)(struct i2c_adapter *adap,
 					   struct i2c_msg *msgs, int num);
 	};
+#endif
 	int (*smbus_xfer)(struct i2c_adapter *adap, u16 addr,
 			  unsigned short flags, char read_write,
 			  u8 command, int size, union i2c_smbus_data *data);
